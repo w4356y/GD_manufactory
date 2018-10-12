@@ -47,8 +47,10 @@ class  GetPngData(object):
         self.train_data_path2=join(self.path,dir)
         #print (self.train_data_path2)
     def extract_test(self):
+        #self.test_name=[]
         file=zf.ZipFile(self.test_path,'r')
         for name in file.namelist():
+            #self.test_name.append(name)
             path=Path(file.extract(name))
             path.rename(name.encode('cp437').decode('gbk'))
         dir = file.namelist()[0]
@@ -61,8 +63,9 @@ class  GetPngData(object):
         map_dict={}
         label_dict={}
         for x in os.listdir(path):
-            map_dict[x]=join(path,x)
-            label_dict[x]=category
+            if  x.endswith(".jpg"):
+                map_dict[x]=join(path,x)
+                label_dict[x]=category
         return map_dict,label_dict
     def get_train_data2(self):
 
@@ -88,9 +91,10 @@ class  GetPngData(object):
                                 map_name_dict.update(other_data)
                                 map_label_dict.update(other_label)
                             else:
-                                label = list_cat[j]
-                                map_name_dict[pn_list[p]] = join(path,list_cat[j],pn_list[p])
-                                map_label_dict[pn_list[p]] = label
+                                if pn_list[p].endswith(".jpg"):
+                                    label = list_cat[j]
+                                    map_name_dict[pn_list[p]] = join(path,list_cat[j],pn_list[p])
+                                    map_label_dict[pn_list[p]] = label
                 else:
                     for l in range(len(list_cat)):
                         label= path_name
@@ -140,17 +144,19 @@ class  GetPngData(object):
 
     def read_test_img(self,test_map):
         test_data=[]
+        test_name=[]
         for i in range(len(test_map)):
+            test_name.append(test_map[i])
             pic_name=join(self.test_data_path,test_map[i])
             test_data.append(cv2.imread(pic_name))
-        return test_data
+        return test_name,test_data
 
     def turn_label_to_num(self,label):
 
         label_dict={'无瑕疵样本':0, '不导电':1, '凸粉':2, '擦花':3,'桔皮' :4,'横条压凹':5,'涂层开裂':6, '漏底':7,'碰伤':8,'脏点':9, '起坑':10,'其他':11}
-        df_label=pd.DataFrame(label)
-        label_num=df_label[0].map(label_dict)
-
+        #df_label=pd.DataFrame(label)
+        #label_num=df_label[0].map(label_dict)
+        label_num=[label_dict[k] for k in label]
         return label_num
 
     def main_train(self):
@@ -159,17 +165,18 @@ class  GetPngData(object):
         train,label=self.read_train_img2(train_map,label_map)
         return [train,label]
     def main_test(self):
-        self.extract_test()
+        #self.extract_test()
         test_map=self.get_test_data()
-        test=self.read_test_img(test_map)
-        return test
+        name,data=self.read_test_img(test_map)
+        return name,data
 
 
 if __name__=="__main__":
     Png_Data=GetPngData()
-    x,y=Png_Data.main_train()
+    x,y=Png_Data.get_train_data2()
+    name,data=Png_Data.main_test()
     print(len(x))
-    print(len(y))
-    print(y)
+    #print(len(data))
+    #print(name)
     #x,y=Png_Data.main()
     #print (os.listdir(os.getcwd()))

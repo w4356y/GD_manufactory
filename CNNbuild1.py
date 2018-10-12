@@ -11,7 +11,7 @@ cur_dir = os.path.dirname(os.path.abspath(__file__))
 #print (cur_dir)
 os.chdir(cur_dir)
 
-BATCH_SIZE=200
+BATCH_SIZE=90
 PIC_LENGTH=640
 ###1920 orig
 PIC_WIDTH=640
@@ -225,7 +225,7 @@ class GD_CNN(object):
             with tf.name_scope('layer1'):
                 #[-1,640,640,3] -> [-1,160,160,3] -> [-1,80,80,3]
                 lay_1_channel = 3
-                w_conv1 = tf.Variable(tf.truncated_normal([8, 8, 3, lay_1_channel]), name='w_conv1')
+                w_conv1 = tf.Variable(tf.truncated_normal([5, 5, 3, lay_1_channel]), name='w_conv1')
                 b_conv1 = tf.Variable(tf.constant(0.01, shape=[lay_1_channel]), name='b_conv1')
                 v_conv1 = tf.nn.conv2d(input_x, w_conv1, strides=[1, 4, 4, 1], padding='SAME', name='v_conv1')
                 h_conv1 = tf.nn.relu(v_conv1 + b_conv1, name='h_conv1')
@@ -253,8 +253,8 @@ class GD_CNN(object):
                 h_out3 = h_pool3
             with tf.name_scope("fully_connected_layer1"):
                 h_flat1 = tf.reshape(h_out3, [-1, 7 * 7 * lay_3_channel])
-                w_fc1=tf.Variable(tf.truncated_normal([7*7*lay_3_channel,512],stddev=0.1),name='wfc1')
-                b_fc1=tf.Variable(tf.constant(0.01,shape=[512]),name='b_fc1')
+                w_fc1=tf.Variable(tf.truncated_normal([7*7*lay_3_channel,1024],stddev=0.1),name='wfc1')
+                b_fc1=tf.Variable(tf.constant(0.01,shape=[1024]),name='b_fc1')
                 v_fc1=tf.matmul(h_flat1,w_fc1,name='v_fc1')
                 fc1=v_fc1+b_fc1
                 fc1_mean, fc1_var = tf.nn.moments(
@@ -270,7 +270,7 @@ class GD_CNN(object):
                 #h_fc1 = tf.nn.relu(v_fc1+b_fc1, name='h_fc1')
                 h_drop1=tf.nn.dropout(h_fc1,self.keep_prob[0],name='h_drop1')
             with tf.name_scope("fully_connected_layer2"):
-                w_fc2=tf.Variable(tf.truncated_normal([512,100],stddev=0.1),name='wfc2')
+                w_fc2=tf.Variable(tf.truncated_normal([1024,100],stddev=0.1),name='wfc2')
                 b_fc2=tf.Variable(tf.constant(0.01,shape=[100]),name='b_fc2')
                 v_fc2=tf.matmul(h_drop1,w_fc2,name='v_fc2')
                 fc2 = v_fc2 + b_fc2
@@ -397,7 +397,42 @@ class GD_CNN(object):
     #def buidCNN(self):
     #    self.graph=tf.Graph()
     #    with self.graph.as_default():
-
+    def generate_random_batch_from_aug_data(self,x,y):
+        data_x=[]
+        data_y=[]
+        x_all=[]
+        y_all=[]
+        #y_all.extend(y)
+        x_resized = data_augmentation(x)
+        #x_all.extend(x_resized)
+        #x_resized_scale, y_scale = central_scale_images(x_resized, y, [0.9, 0.75, 0.6])
+        #_all.extend(x_resized_scale)
+        #print(x_resized_scale.shape)
+        #print(y_scale.shape)
+        #y_all.extend(y_scale)
+        x_flip, y_flip = flip_images(x_resized, y)
+        #print(x_flip.shape)
+        #print(y_flip.shape)
+        x_all.extend(x_flip)
+        y_all.extend(y_flip)
+        #x_transpose, y_transpose = translate_images(x_resized, y)
+        #print(x_transpose.shape)
+        #print(y_transpose.shape)
+        #x_all.extend(x_transpose)
+        #y_all.extend(y_transpose)
+        x_rotate,y_rotate=rotate_images(x_resized,y)
+        x_all.extend(x_rotate)
+        y_all.extend(y_rotate)
+        x_gaussian,y_gaussian=add_gaussian_noise(x_resized,y)
+        x_all.extend(x_gaussian)
+        y_all.extend(y_gaussian)
+        shuf = np.random.choice([i for i in range(len(x_all))],30,replace=False)
+        for i in shuf:
+            data_x.append(x_all[i])
+            data_y.extend([y_all[i]])
+        data_x.extend(x_resized)
+        data_y.extend(y)
+        return np.asarray(data_x),np.asarray(data_y)
     def train_para(self):
         with self.graph.as_default():
             with tf.name_scope("loss"):
@@ -462,20 +497,21 @@ class GD_CNN(object):
             #print(x_test_resized.shape)
             name,predict_data=self.get_test_data()
             predict_data_resized=data_augmentation_test(predict_data)
-            while run_step<500 and acc<=0.93:
+            while run_step<500 and acc<=0.95:
                 #print (run_step)
-                if i <  10:
+                if i <  20:
                     cur_lr = lr_init
                 else:
-                    learning_rate=lr_init*(0.9**(run_step/10))
+                    learning_rate=lr_init*(0.9**(run_step/20))
                     cur_lr = learning_rate
                 sess.run(self._lr_update,feed_dict={self._new_lr: cur_lr})
                 #x=train
                 #y=train_label
                 #if run_step<20:
                 x,y=self.get_batch_data_from_file(rank)
-                x_resized=data_augmentation(x)
-                #x_distorted=self.data_augmentation(x)
+                #x, y = self.get_even_distrib_batch_data(rank)
+                x_,y_=self.generate_random_batch_from_aug_data(x,y)
+
                 #print (x_distorted.shape)
                 #else:
                 #x,y=self.get_even_distrib_batch_data(rank)
@@ -488,16 +524,16 @@ class GD_CNN(object):
                 #print(y)
                 #x_test=test[0]
                 #y_test=test[1]
-                sess.run(self.train_step, feed_dict={self.input_x: x_resized, self.input_y: y})
-                loss = sess.run(self.loss, feed_dict={self.input_x: x_resized, self.input_y: y})
-                train_acc = sess.run(self.accuracy, feed_dict={self.input_x: x_resized, self.input_y: y})
+                sess.run(self.train_step, feed_dict={self.input_x: x_, self.input_y: y_})
+                loss = sess.run(self.loss, feed_dict={self.input_x: x_, self.input_y: y_})
+                train_acc = sess.run(self.accuracy, feed_dict={self.input_x: x_, self.input_y: y_})
                 #self.batch=len(x_test)
                 #print (len(x_test))
                 test_loss = sess.run(self.loss, feed_dict={self.input_x: x_test_resized, self.input_y: y_test})
                 test_acc = sess.run(self.accuracy, feed_dict={self.input_x: x_test_resized, self.input_y: y_test})
                 acc=test_acc
                 #self.batch=len(x)
-                reg=sess.run(self.lossL2,feed_dict={self.input_x: x_resized, self.input_y: y})
+                #reg=sess.run(self.lossL2,feed_dict={self.input_x: x_resized, self.input_y: y})
                 #print (reg)
                 if run_step % 5 == 0:
                     print("run_step: %g, train_loss: %g, test_loss: %g, train_acc: %g, test_acc: %g" % (
